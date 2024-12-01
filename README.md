@@ -26,3 +26,9 @@ Clone this repository to your local machine:
 
 ```bash
 git clone https://github.com/Mrxanonymous1/osint
+
+```bash
+cd osint
+
+```bash
+python main.py
