@@ -22,7 +22,7 @@ def load_random_messages():
 random_messages = load_random_messages()
 
 # List of allowed user IDs (Replace with actual Telegram user IDs of people who are allowed to use the bot)
-allowed_user_ids = [7238962247,7719248716,6974330343]  # Replace with actual user IDs
+allowed_user_ids = [7238962247,7719248716,7137463942,6974330343]  # Replace with actual user IDs
 
 # Function to send spam to a specific user in the group
 async def send_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):
