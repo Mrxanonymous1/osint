@@ -1,14 +1,56 @@
 import logging
 import random
-import time
+import json
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Set up logging to help with debugging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Function to load random messages from words.txt file
+USERS_FILE = 'users.json'
+
+# Define the owner user ID (Replace with your own Telegram user ID)
+OWNER_ID = 7238962247  # Replace with the actual Telegram user ID of the owner
+
+def load_authorized_users():
+    try:
+        with open(USERS_FILE, 'r', encoding='utf-8') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []  # Return an empty list if the file does not exist
+    except json.JSONDecodeError:
+        return []  # Return an empty list if there's an issue with the file format
+
+def save_authorized_users():
+    with open(USERS_FILE, 'w', encoding='utf-8') as file:
+        json.dump(AUTHORIZED_USERS, file, ensure_ascii=False, indent=4)
+
+AUTHORIZED_USERS = load_authorized_users()  # Load authorized users from file
+
+# Blocked usernames (case-insensitive check)
+blocked_usernames = ['mrxanonymous', 'mrxanon', 'mrxanonymous1']
+blocked_usernames = [username.lower() for username in blocked_usernames]
+
+def is_authorized(user_id: int) -> bool:
+    """Check if a user is authorized or the owner."""
+    return user_id == OWNER_ID or user_id in AUTHORIZED_USERS
+
+def add_authorized_user(user_id: int) -> str:
+    """Add a new authorized user."""
+    if user_id in AUTHORIZED_USERS:
+        return f"User {user_id} is already authorized."
+    AUTHORIZED_USERS.append(user_id)
+    save_authorized_users()  # Save the updated list to the file
+    return f"User {user_id} has been successfully added."
+
+def remove_authorized_user(user_id: int) -> str:
+    """Remove an authorized user."""
+    if user_id not in AUTHORIZED_USERS:
+        return f"User {user_id} is not in the authorized list."
+    AUTHORIZED_USERS.remove(user_id)
+    save_authorized_users()  # Save the updated list to the file
+    return f"User {user_id} has been removed from the authorized list."
+
 def load_random_messages():
     try:
         with open('words.txt', 'r', encoding='utf-8') as file:
@@ -18,77 +60,77 @@ def load_random_messages():
         logger.error(f"Error loading words from file: {e}")
         return []
 
-# Load random messages from file
 random_messages = load_random_messages()
 
-# List of allowed user IDs (Replace with actual Telegram user IDs of people who are allowed to use the bot)
-allowed_user_ids = [7238962247,7719248716,7137463942,6974330343]  # Replace with actual user IDs
-
-# Function to send spam to a specific user in the group
 async def send_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-
-    # Check if the user is allowed to use the bot
-    if user_id not in allowed_user_ids:
+    if not is_authorized(user_id):
         await update.message.reply_text("You are not authorized to use this bot.")
         return
-
     try:
-        # Extract the number of spams and target username from the user's message (e.g., "/spam 5 @targetusername")
         num_spams = int(context.args[0]) if context.args else 1
         target_username = context.args[1] if len(context.args) > 1 else None
-
-        # Ensure the number of spams is positive
         if num_spams <= 0:
             await update.message.reply_text("Please enter a positive number for spam.")
             return
-
-        # Ensure the target username is provided
         if not target_username:
             await update.message.reply_text("Please provide a valid username to spam.")
             return
 
-        # Remove '@' from the username (if provided)
-        target_username = target_username.lstrip('@')
+        target_username = target_username.lstrip('@').lower()
+        if target_username in blocked_usernames:
+            await update.message.reply_text(f"Why I spam my owner? You cannot spam @{target_username}.")
+            return
 
-        # Get the chat ID where the command was issued (This is important to send the message to the group)
         chat_id = update.message.chat_id
-
-        # Send spam message targeting the username (for group context)
         for _ in range(num_spams):
             random_message = random.choice(random_messages)
             spam_message = f"@{target_username} {random_message}"
-            await context.bot.send_message(chat_id, spam_message)  # Send to the group chat
-            time.sleep(1)  # Delay between spam messages (1 second)
-    
+            await context.bot.send_message(chat_id, spam_message)
     except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /spam <number_of_spams> <@username>")
+        await update.message.reply_text("Usage: /raid <number_of_spams> <@username>")
 
-# Command to start the bot and display a welcome message
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if not is_authorized(user_id):
+        await update.message.reply_text("You are not authorized to add new users.")
+        return
+    try:
+        new_user_id = int(context.args[0])
+        result = add_authorized_user(new_user_id)
+        await update.message.reply_text(result)
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /adduser <user_id>")
+
+async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if not is_authorized(user_id):
+        await update.message.reply_text("You are not authorized to remove users.")
+        return
+    try:
+        user_to_remove_id = int(context.args[0])
+        result = remove_authorized_user(user_to_remove_id)
+        await update.message.reply_text(result)
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /removeuser <user_id>")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     logger.info(f"User {user.id} started the conversation.")
     await update.message.reply_text(
         "Hello! I can spam messages to a specific user in the group.\n"
         "Use the command /raid <number_of_spams> <@username> to get spammed!\n"
-        "Example: /raid 5 @targetusername"
+        "Example: /raid 5 @targetusername\n\n"
+        "Authorized users can add or remove users using /adduser and /removeuser commands."
     )
 
-# Main function to run the bot
 def main():
-    # Your Telegram Bot Token
     bot_token = '7892011069:AAEnIuxHBcV2ty-p7yDwm6k7MkDpjUQSjl8'  # Replace with your bot's token
-
-    # Create the application
-    application = Application.builder().token('7892011069:AAEnIuxHBcV2ty-p7yDwm6k7MkDpjUQSjl8').build()
-
-    # Command handler for /start command
+    application = Application.builder().token("7892011069:AAEnIuxHBcV2ty-p7yDwm6k7MkDpjUQSjl8").build()
     application.add_handler(CommandHandler("start", start))
-
-    # Command handler for /spam command
     application.add_handler(CommandHandler("raid", send_spam))
-
-    # Run the bot
+    application.add_handler(CommandHandler("adduser", add_user))
+    application.add_handler(CommandHandler("removeuser", remove_user))
     application.run_polling()
 
 if __name__ == '__main__':
